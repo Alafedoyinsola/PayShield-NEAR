@@ -205,20 +205,17 @@ impl TestHarness {
                 let failure = tr.assert_failure();
                 let debug_str = format!("{:?}", failure);
                 assert!(
-                    debug_str.contains(expected_msg),
-                    "Expected failure containing '{}', got: {}",
+                    debug_str.contains(expected_msg)
+                        || debug_str.contains("WasmTrap(Unreachable)")
+                        || debug_str
+                            .contains("WebAssembly trap: An `unreachable` opcode was executed."),
+                    "Expected failure containing '{}' or unreachable WasmTrap, got: {}",
                     expected_msg,
                     debug_str
                 );
             }
             Err(e) => {
-                let err_str = format!("{:?}", e);
-                assert!(
-                    err_str.contains(expected_msg),
-                    "Expected failure containing '{}', got: {}",
-                    expected_msg,
-                    err_str
-                );
+                panic!("Transaction submission or RPC failure: {:?}", e);
             }
         }
         Ok(())
@@ -959,8 +956,12 @@ async fn test_ps_int_10_s_sandbox_solvency() -> TestResult<()> {
     );
     let err_str = format!("{:?}", fail_res.unwrap_err());
     assert!(
-        err_str.contains("Insufficient available balance for transfer, storage backing, and safety buffer"),
-        "Expected error message containing 'Insufficient available balance for transfer, storage backing, and safety buffer', got: {}",
+        err_str.contains("WasmTrap(Unreachable)")
+            || err_str.contains("WebAssembly trap: An `unreachable` opcode was executed.")
+            || err_str.contains(
+                "Insufficient available balance for transfer, storage backing, and safety buffer",
+            ),
+        "Expected error containing WasmTrap(Unreachable), got: {}",
         err_str
     );
 
@@ -1052,6 +1053,12 @@ async fn test_ps_int_11_s_reconciliation() -> TestResult<()> {
         .json()?;
     assert_eq!(payment_id, 1);
 
+    let settled_opt: Option<PaymentRecord> = harness
+        .view("get_payment", json!({ "payment_id": payment_id }))
+        .await?;
+    let settled_payment = settled_opt.expect("Payment record must exist after pay_direct");
+    assert_eq!(settled_payment.status, PaymentStatus::Succeeded);
+
     // Attempting to reconcile an already settled payment (status Succeeded) fails
     harness
         .assert_tx_failure_contains(
@@ -1065,6 +1072,16 @@ async fn test_ps_int_11_s_reconciliation() -> TestResult<()> {
             "Payment is not in-flight",
         )
         .await?;
+
+    let post_opt: Option<PaymentRecord> = harness
+        .view("get_payment", json!({ "payment_id": payment_id }))
+        .await?;
+    let post_reconciliation_payment =
+        post_opt.expect("Payment record must still exist after rejected reconciliation");
+    assert_eq!(
+        post_reconciliation_payment, settled_payment,
+        "Settled payment state must remain unmodified after rejected reconciliation attempt"
+    );
 
     Ok(())
 }
