@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use contract::{
-    calculate_day_index, compute_storage_shortfall, DailySpendingUsage, ExecutionPreflightOutcome,
-    PayShield, PaymentPolicy, PaymentProposal, PaymentRecord, PaymentStatus, ProposalStatus,
-    RecipientStatus, SettlementSource, PAYMENT_SETTLEMENT_TIMEOUT, STORAGE_SAFETY_BUFFER,
+    calculate_day_index, compute_storage_shortfall, DailySpendingUsage, ExecutionOutcome,
+    ExecutionPreflightOutcome, PayShield, PaymentPolicy, PaymentProposal, PaymentRecord,
+    PaymentStatus, ProposalStatus, RecipientStatus, SettlementSource, PAYMENT_SETTLEMENT_TIMEOUT,
+    STORAGE_SAFETY_BUFFER,
 };
 use near_api::{
     types::{
@@ -616,7 +617,7 @@ async fn test_ps_int_06_proposal_lifecycle() -> TestResult<()> {
     assert_eq!(prop_approved.unwrap().status, ProposalStatus::Approved);
 
     // 3. Owner executes approved proposal
-    let payment_id: u64 = harness
+    let outcome: ExecutionOutcome = harness
         .call_tx(
             harness.owner_id.clone(),
             "execute_proposal",
@@ -624,7 +625,7 @@ async fn test_ps_int_06_proposal_lifecycle() -> TestResult<()> {
         )
         .await?
         .json()?;
-    assert_eq!(payment_id, 1);
+    assert_eq!(outcome, ExecutionOutcome::Executed { payment_id: 1 });
 
     // 4. Verify proposal is Executed
     let prop_exec: Option<PaymentProposal> = harness
@@ -762,15 +763,13 @@ async fn test_ps_int_08_proposal_rejection_and_revocation() -> TestResult<()> {
         )
         .await?;
 
-    let rej_status: ProposalStatus = harness
+    harness
         .call_tx(
             harness.owner_id.clone(),
             "reject_proposal",
             json!({ "proposal_id": 1 }),
         )
-        .await?
-        .json()?;
-    assert_eq!(rej_status, ProposalStatus::Rejected);
+        .await?;
 
     let prop1: Option<PaymentProposal> = harness
         .view("get_proposal", json!({ "proposal_id": 1 }))
@@ -798,15 +797,13 @@ async fn test_ps_int_08_proposal_rejection_and_revocation() -> TestResult<()> {
         )
         .await?;
 
-    let revoke_status: ProposalStatus = harness
+    harness
         .call_tx(
             harness.owner_id.clone(),
             "reject_proposal",
             json!({ "proposal_id": 2 }),
         )
-        .await?
-        .json()?;
-    assert_eq!(revoke_status, ProposalStatus::Rejected);
+        .await?;
 
     let prop2: Option<PaymentProposal> = harness
         .view("get_proposal", json!({ "proposal_id": 2 }))
@@ -836,11 +833,11 @@ async fn test_ps_int_08_proposal_rejection_and_revocation() -> TestResult<()> {
 
 #[tokio::test]
 async fn test_ps_int_09_daily_spending_and_reservations() -> TestResult<()> {
-    // Isolated setup: daily_spending_limit: 3 NEAR, approval_threshold: 2 NEAR
+    // Isolated setup: daily_spending_limit: 3 NEAR, approval_threshold: 1 NEAR
     let policy = json!({
         "max_amount_per_tx": NearToken::from_near(5).as_yoctonear().to_string(),
         "daily_spending_limit": NearToken::from_near(3).as_yoctonear().to_string(),
-        "require_approval_above": NearToken::from_near(2).as_yoctonear().to_string(),
+        "require_approval_above": NearToken::from_near(1).as_yoctonear().to_string(),
     });
     let harness = match TestHarness::setup_with_policy(policy).await? {
         Some(h) => h,
@@ -855,26 +852,26 @@ async fn test_ps_int_09_daily_spending_and_reservations() -> TestResult<()> {
         )
         .await?;
 
-    // 1. Direct payment of 1.5 NEAR (confirmed)
+    // 1. Direct payment of 1 NEAR (confirmed)
     harness
         .call_tx(
             harness.agent_id.clone(),
             "pay_direct",
             json!({
                 "recipient": harness.merchant_id,
-                "amount": NearToken::from_millinear(1500).as_yoctonear().to_string(),
+                "amount": NearToken::from_near(1).as_yoctonear().to_string(),
             }),
         )
         .await?;
 
-    // 2. Proposal payment of 1.5 NEAR (confirmed via execute)
+    // 2. Proposal payment of 2 NEAR (confirmed via execute)
     harness
         .call_tx(
             harness.agent_id.clone(),
             "propose_payment",
             json!({
                 "recipient": harness.merchant_id,
-                "amount": NearToken::from_millinear(1500).as_yoctonear().to_string(),
+                "amount": NearToken::from_near(2).as_yoctonear().to_string(),
                 "reason": "Quota test proposal",
             }),
         )
@@ -911,7 +908,7 @@ async fn test_ps_int_09_daily_spending_and_reservations() -> TestResult<()> {
     // Verify daily spending tracking
     let current_day: u64 = harness.view("get_current_day_index", ()).await?;
     let daily_usage: DailySpendingUsage = harness
-        .view("get_daily_spending", json!({ "day_index": current_day }))
+        .view("get_daily_spending", json!({ "day_id": current_day }))
         .await?;
     assert_eq!(daily_usage.confirmed_amount, NearToken::from_near(3));
     assert_eq!(daily_usage.reserved_amount, NearToken::from_yoctonear(0));
@@ -933,19 +930,17 @@ async fn test_ps_int_10_s_sandbox_solvency() -> TestResult<()> {
         .await?;
     let contract_balance = account_info.data.amount;
 
-    // 2. Calling check_liquid_balance_safety with a safe amount succeeds
+    // 2. Query required liquid balance for a safe amount and verify solvency against contract balance
     let safe_amount = NearToken::from_near(1);
-    let ok_res: Result<near_api::types::Data<()>, _> = Contract(harness.contract_id.clone())
-        .call_function(
-            "check_liquid_balance_safety",
+    let required_liquid: NearToken = harness
+        .view(
+            "get_required_liquid_balance",
             json!({ "transfer_amount": safe_amount.as_yoctonear().to_string() }),
         )
-        .read_only()
-        .fetch_from(&harness.network)
-        .await;
+        .await?;
     assert!(
-        ok_res.is_ok(),
-        "check_liquid_balance_safety should succeed for safe amount on funded contract"
+        contract_balance >= required_liquid,
+        "Contract balance should safely cover transfer, storage backing, and safety buffer"
     );
 
     // 3. Calling check_liquid_balance_safety with transfer amount equal to current contract balance
@@ -997,7 +992,7 @@ async fn test_ps_int_11_s_reconciliation() -> TestResult<()> {
                 "transfer_succeeded": true,
                 "evidence_ref": "https://explorer.near.org/tx/1",
             }),
-            "Only the contract owner can call this method",
+            "Unauthorized: caller is not the contract owner",
         )
         .await?;
 
