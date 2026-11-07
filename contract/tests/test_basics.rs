@@ -1708,7 +1708,8 @@ async fn test_ps_int_18_prompt_injection_attack_blocked_recipient() -> TestResul
         .send_to(&harness.network)
         .await?;
 
-    let _failure = result.assert_failure();
+    let failure = result.assert_failure();
+    println!("[BLOCKED PAYMENT FAILURE DETAILS] {:?}", failure);
 
     // 6. Post-attack state snapshot
     let contract_balance_after: NearToken = Account(harness.contract_id.clone())
