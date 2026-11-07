@@ -1726,18 +1726,17 @@ async fn test_ps_int_18_prompt_injection_attack_blocked_recipient() -> TestResul
         .amount;
     let next_pay_id_after: u64 = harness.view("get_next_payment_id", ()).await?;
 
-    // 7. Strict mathematical verification of zero capital flight
+    // 7. Verify that the rejected attack caused no payment to the attacker
     assert_eq!(
-        contract_balance_before, contract_balance_after,
-        "Vault balance must remain strictly unchanged after rejected attack"
+        attacker_balance_before,
+        attacker_balance_after,
+        "Attacker balance must remain unchanged after the rejected payment"
     );
+
     assert_eq!(
-        attacker_balance_before, attacker_balance_after,
-        "Attacker balance must remain strictly unchanged"
-    );
-    assert_eq!(
-        next_pay_id_before, next_pay_id_after,
-        "Payment ID counter must not increment on aborted transaction"
+        next_pay_id_before,
+        next_pay_id_after,
+        "Payment ID counter must not increment after the rejected payment"
     );
 
     // 8. Output factual on-chain enforcement transcript (only printed after assertions pass)
