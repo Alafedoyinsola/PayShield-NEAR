@@ -1,0 +1,92 @@
+name: PayShield NEAR CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-format:
+    name: Lint & Format Check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0"
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Verify Code Formatting
+        working-directory: contract
+        run: |
+          rustfmt --check src/lib.rs
+          rustfmt --edition 2021 --check tests/test_basics.rs
+
+      - name: Run Clippy Linter
+        working-directory: contract
+        run: cargo clippy --all-features --tests -- --warn clippy::all --warn clippy::nursery
+
+  verify-wasm:
+    name: Verify WASM Baseline Integrity
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Assert Release WASM Exists and Hash Matches
+        run: |
+          test -f contract/target/wasm32-unknown-unknown/release/contract.wasm
+          echo "1b9edd1b4210189c5e95346d01f9ae3bc43064d0312bdd5bc4e09315989708f4  contract/target/wasm32-unknown-unknown/release/contract.wasm" | sha256sum --check
+
+  unit-tests:
+    name: Contract Unit Tests
+    needs: [lint-and-format, verify-wasm]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0"
+          targets: wasm32-unknown-unknown
+
+      - name: Run Contract Unit Tests
+        working-directory: contract
+        run: cargo test --lib
+
+  sandbox-integration:
+    name: Sandbox Integration Tests
+    needs: [unit-tests, verify-wasm]
+    runs-on: ubuntu-24.04
+    env:
+      REQUIRE_SANDBOX: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0"
+          targets: wasm32-unknown-unknown
+
+      - name: Run Sandbox Integration Tests
+        working-directory: contract
+        shell: bash
+        run: |
+          set -e -o pipefail
+          cargo test --test test_basics -- --nocapture 2>&1 | tee test_output.log
+          if grep -q "SKIPPING SANDBOX TEST" test_output.log; then
+            echo "::error::Sandbox integration tests were bypassed in CI!"
+            exit 1
+          fi

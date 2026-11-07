@@ -1,0 +1,41 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+target/
+
+# Rust
+**/target/
+
+# Local databases and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+
+# Local configuration
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
