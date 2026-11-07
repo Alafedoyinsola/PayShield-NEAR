@@ -1728,14 +1728,12 @@ async fn test_ps_int_18_prompt_injection_attack_blocked_recipient() -> TestResul
 
     // 7. Verify that the rejected attack caused no payment to the attacker
     assert_eq!(
-        attacker_balance_before,
-        attacker_balance_after,
+        attacker_balance_before, attacker_balance_after,
         "Attacker balance must remain unchanged after the rejected payment"
     );
 
     assert_eq!(
-        next_pay_id_before,
-        next_pay_id_after,
+        next_pay_id_before, next_pay_id_after,
         "Payment ID counter must not increment after the rejected payment"
     );
 
