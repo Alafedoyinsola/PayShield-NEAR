@@ -54,9 +54,9 @@ PayShield supports two distinct execution paths depending on transaction size an
 ### Path A: Human-in-the-Loop Proposal Workflow
 1. **Proposal Creation (`propose_payment`):** Agent submits recipient, transfer amount, and memo reason. Recipient must not be `Blocked`. Allocates `proposal_id` in `Pending` status.
 2. **Owner Review:**
-   - **Approval (`approve_proposal`):** Owner transitions proposal from `Pending` to `Approved`. If the proposal has expired (TTL: 7 days), it is persistently marked `Expired`.
+   - **Approval (`approve_proposal`):** Owner transitions proposal from `Pending` to `Approved`. If the proposal has expired (TTL: 24 hours), it is persistently marked `Expired`.
    - **Rejection (`reject_proposal`):** Owner rejects a `Pending` proposal or revokes an `Approved` proposal prior to execution.
-3. **Preflight Validation (`preflight_proposal_execution`):** An owner-or-agent authorized contract call (classified as `call`, not `view`, in the ABI). Validates whether an approved proposal can execute by verifying recipient status, policy limits, prospective daily spending quota, payment ID allocation safety, and liquid balance solvency. If an approved proposal has passed its 7-day TTL, this call mutates contract state by updating the proposal's status to `Expired`.
+3. **Preflight Validation (`preflight_proposal_execution`):** An owner-or-agent authorized contract call (classified as `call`, not `view`, in the ABI). Validates whether an approved proposal can execute by verifying recipient status, policy limits, prospective daily spending quota, payment ID allocation safety, and liquid balance solvency. If an approved proposal has passed its 24-hour TTL, this call mutates contract state by updating the proposal's status to `Expired`.
 4. **Execution Dispatch (`execute_proposal`):** Callable by owner or agent. Transitions proposal to `Executing`, allocates a monotonic `payment_id`, creates an `InFlight` payment record, locks a daily spending reservation, flushes storage maps, and dispatches a native transfer promise chained to the private settlement callback.
 
 ### Path B: Agent Direct Payment Workflow (`pay_direct`)
@@ -78,7 +78,7 @@ PayShield supports two distinct execution paths depending on transaction size an
 | `init` | Public (once) | State Init | Single-use only (`assert!(!env::state_exists())`). |
 | `set_recipient_status` | Owner only | Mutation | Sets recipient to `Allowed`, `PendingApproval`, or `Blocked`. |
 | `propose_payment` | Agent only | Mutation | Creates pending proposal. Rejects `Blocked` recipients. |
-| `approve_proposal` | Owner only | Mutation | Approves proposal. Sets `Expired` if 7-day TTL elapsed. |
+| `approve_proposal` | Owner only | Mutation | Approves proposal. Sets `Expired` if 24-hour TTL elapsed. |
 | `reject_proposal` | Owner only | Mutation | Rejects pending or revokes approved proposal. |
 | `preflight_proposal_execution` | Owner or Agent | Mutation | Validates limits and safety before execution. |
 | `execute_proposal` | Owner or Agent | Mutation | Dispatches transfer promise + callback. Locks quota reservation. |
@@ -175,5 +175,5 @@ To ensure strict engineering integrity, note the following boundaries of this sm
 2. **No Agent-Side Signing Wrapper:** This crate contains only the on-chain smart contract. It does not provide client-side interceptors that stop an agent from signing or broadcasting transactions targeting blocked addresses.
 3. **No Prompt-Injection Defense:** Prompt-injection mitigation must be implemented at the AI agent/runtime layer. The contract acts strictly as an immutable on-chain policy enforcement boundary.
 4. **No Pre-Provisioned Access Keys:** Function-call access keys for the agent have not been provisioned. In production, the agent must be restricted to function-call keys limited to `propose_payment` and `pay_direct`.
-5. **No Testnet/Mainnet Deployment:** This contract has not been deployed to NEAR testnet or mainnet.
+5. **Network Deployment:** The contract is deployed on NEAR Testnet at `payshield-agent-demo.testnet`. The frontend uses read-only RPC calls to this contract. No Mainnet deployment is claimed. The contract's deployment and initialized state have been checked through read-only Testnet RPC calls.
 6. **Unit Tests Are Not Live Proof:** 160 passing unit tests demonstrate internal algorithmic correctness under mocked runtime environments (`testing_env!`), but do not substitute for live testnet verification or integration audits.
