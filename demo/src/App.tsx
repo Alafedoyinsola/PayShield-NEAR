@@ -348,7 +348,7 @@ function App() {
               </div>
             </article>
 
-            <article className="panel approval-panel" id="approvals">
+            <article className="panel approval-panel">
               <div className="panel-header">
                 <div>
                   <div className="eyebrow">OWNER CONTROL</div>
@@ -456,6 +456,62 @@ function App() {
                       </span>
                       <span>
                         Settled: <strong>{payment.settled_at ? new Date(payment.settled_at / 1_000_000).toLocaleString() : 'Not settled'}</strong>
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel payments-panel" id="approvals">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">HUMAN REVIEW QUEUE</div>
+                <h2>Payment approvals</h2>
+                <p className="panel-description">
+                  Payment proposals and their current on-chain lifecycle status.
+                </p>
+              </div>
+              <span className="tag">
+                {data ? `${data.pendingProposals} PENDING` : 'LOADING'}
+              </span>
+            </div>
+
+            {!data ? (
+              <div className="empty-state">
+                <strong>{loading ? 'Loading proposals...' : 'Proposals unavailable'}</strong>
+                <p>{loading ? 'Reading proposals from NEAR Testnet.' : 'Refresh the dashboard to try again.'}</p>
+              </div>
+            ) : data.proposals.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">✓</div>
+                <strong>No payment proposals</strong>
+                <p>New proposals awaiting review will appear here.</p>
+              </div>
+            ) : (
+              <div className="payment-list">
+                {data.proposals.map((proposal) => (
+                  <article className="payment-entry" key={proposal.proposal_id}>
+                    <div className="payment-entry-main">
+                      <div>
+                        <strong>Proposal #{proposal.proposal_id}</strong>
+                        <span>{proposal.recipient}</span>
+                        <span>{proposal.reason || 'No reason provided'}</span>
+                      </div>
+                      <div className="payment-amount">
+                        {formatNear(proposal.amount)} <small>NEAR</small>
+                      </div>
+                    </div>
+                    <div className="payment-entry-meta">
+                      <span>
+                        Status: <strong>{proposal.status}</strong>
+                      </span>
+                      <span>
+                        Created: <strong>{new Date(proposal.created_at / 1_000_000).toLocaleString()}</strong>
+                      </span>
+                      <span>
+                        Expires: <strong>{new Date(proposal.expires_at / 1_000_000).toLocaleString()}</strong>
                       </span>
                     </div>
                   </article>
