@@ -61,7 +61,7 @@ All capabilities listed below are fully implemented in the on-chain contract ([`
 - **Solvency & Storage Safety Buffer:** `check_liquid_balance_safety` and `get_required_liquid_balance` enforce that the contract retains adequate liquid NEAR to cover storage staking fees plus a provisional `0.02 NEAR` safety buffer (`STORAGE_SAFETY_BUFFER`). This is a configured safety margin to absorb routine post-write storage changes, not an absolute guarantee against arbitrary storage-cost increases or unbounded state growth.
 
 ### 3.4 Proposal Lifecycle Management
-- **Automatic 7-Day TTL Expiry:** Proposals remain valid for exactly 7 days (`604,800` seconds). Any attempt to approve, preflight, or execute an expired proposal transitions it to `Expired` and halts execution.
+- **Automatic 24-Hour TTL Expiry:** Proposals remain valid for exactly 24 hours (`86,400` seconds), as defined by `PROPOSAL_VALIDITY_NANOS`. Any attempt to approve, preflight, or execute an expired proposal transitions it to `Expired` and halts execution.
 - **Revocation / Rejection:** The owner can reject an approved proposal at any time prior to execution using `reject_proposal`. The contract changes its status to `ProposalStatus::Rejected` (it does not maintain a separate `Revoked` status enum). Once a proposal enters `Executing`, `Executed`, or other terminal states, it cannot be rejected or revoked.
 
 ### 3.5 Asynchronous Settlement and Emergency Reconciliation
@@ -99,7 +99,7 @@ flowchart TD
         PropGuard -->|"Blocked"| PropReject["Hard Rejection (Revert)"]
         PropGuard -->|"Allowed / PendingApproval"| PendingProp["Persist Proposal (Status: Pending)"]
 
-        Owner -->|"approve_proposal(proposal_id)"| OwnerApprove{"Check 7-Day TTL"}
+        Owner -->|"approve_proposal(proposal_id)"| OwnerApprove{"Check 24-Hour TTL"}
         OwnerApprove -->|"Expired"| MarkExpired["Persist Status: Expired"]
         OwnerApprove -->|"Active"| MarkApproved["Persist Status: Approved"]
         Owner -->|"reject_proposal(proposal_id)"| MarkRejected["Persist Status: Rejected"]
@@ -122,7 +122,7 @@ flowchart TD
 
 > **Proposal Expiry and Emergency Reconciliation**
 >
-> - Proposals whose execution is attempted after their seven-day TTL are marked `ProposalStatus::Expired` and return `ExecutionOutcome::Expired`. This is an expiry outcome, not necessarily a transaction revert.
+> - Proposals whose execution is attempted after their 24-hour TTL are marked `ProposalStatus::Expired` and return `ExecutionOutcome::Expired`. This is an expiry outcome, not necessarily a transaction revert.
 > - If an asynchronous payment remains stuck in flight after the five-minute settlement timeout, the contract owner can use `reconcile_stuck_payment` to resolve it, subject to the contract's reconciliation checks.
 
 ---
@@ -214,7 +214,7 @@ To maintain strict technical transparency, the following capabilities are **not 
 ## 8. Test Status & Verification Checkpoint
 
 The repository state has been audited and verified at checkpoint:
-- **Verified Commit:** `a7cbe73` (branch `master`)
+- **Verified Commit:** `526be8c` (branch `master`)
 - **Unit Test Results:** **160 passed**, 0 failed, 0 ignored ([`contract/src/lib.rs`](contract/src/lib.rs))
 - **Integration Test Results (Hosted CI):** **17 passed**, 0 failed, 0 ignored in hosted GitHub Actions CI ([`contract/tests/test_basics.rs`](contract/tests/test_basics.rs))
   - **14 Asynchronous Sandbox Tests:** Verified passing against a live NEAR Sandbox instance under `REQUIRE_SANDBOX="true"`.
@@ -225,7 +225,7 @@ The repository state has been audited and verified at checkpoint:
   ```
 
 > [!IMPORTANT]
-> The test results and WASM checksum above represent verified findings at commit `a7cbe73`. Hosted CI is the verified execution environment for the Sandbox integration test suite. These results reflect reproducible test outcomes in the established environment and do not constitute a forward guarantee for unverified modifications.
+> The test results and WASM checksum above were verified at commit `526be8c`. GitHub Actions workflow run **#13** for this commit completed successfully, with all four jobs passing: lint and format, WASM baseline integrity, contract unit tests, and Sandbox integration tests. Hosted CI is the verified execution environment for the Sandbox integration test suite. These results do not constitute a forward guarantee for unverified modifications.
 
 ---
 
